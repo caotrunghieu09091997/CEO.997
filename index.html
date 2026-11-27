@@ -1,1 +1,220 @@
-
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TOOL TỔNG TIỀN 35 MÃ</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:#eef4fc;color:#183153;margin:0;padding:12px}
+main{max-width:850px;margin:auto}
+h1{color:#1565df;text-align:center;font-size:25px}
+#editor{background:white;border:2px solid #8ab5ee;border-radius:12px;min-height:180px;max-height:350px;overflow:auto;padding:12px;white-space:pre-wrap;outline:none;font: bold 17px/1.6 monospace}
+#editor:empty:before{content:"Dán danh sách đơn vào đây...";color:#999}
+button{border:0;border-radius:9px;color:white;background:#1763df;padding:14px 10px;font-weight:bold;cursor:pointer;flex:1}
+button:disabled{background:#9ca3af}
+.row{display:flex;gap:8px;margin:10px 0}
+.red{background:#dc2626}
+.green{background:#079447}
+.gray{background:#53657b}
+.total{border-radius:16px;text-align:center;color:white;padding:20px;margin:10px 0;font-weight:bold}
+.total strong{display:block;font-size:40px;margin-top:8px;overflow-wrap:anywhere}
+table{width:100%;border-collapse:collapse;background:white;font-size:14px}
+th{background:#174da5;color:white;padding:12px 4px}
+td{text-align:center;padding:7px 3px;border-bottom:1px solid #ddd}
+tr:nth-child(even){background:#f0f6ff}
+td:last-child{color:#087b40;font-weight:bold}
+input{width:100%;max-width:80px;text-align:center;padding:8px 2px;border:1px solid #b7c8dd;border-radius:6px;font-size:16px}
+#status,#note{padding:8px 0;font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<h1>TOOL TỔNG TIỀN 35 MÃ</h1>
+<div id="editor" contenteditable="plaintext-only" spellcheck="false"></div>
+<div id="status"></div>
+<div class="row">
+<button class="red" id="remove">XÓA DÒNG SAI</button>
+</div>
+<div class="row">
+<button class="green" id="add" disabled>KIỂM TRA &amp; CỘNG DỒN</button>
+</div>
+<div class="total" style="background:linear-gradient(120deg,#1249ba,#2196f3)">
+TỔNG SỐ ĐƠN<strong id="count">0</strong>
+</div>
+<div class="total" style="background:linear-gradient(120deg,#05733d,#22c55e)">
+TỔNG SỐ TIỀN<strong id="money">0đ</strong>
+</div>
+<div class="row">
+<button id="copy">SAO CHÉP KẾT QUẢ</button>
+<button id="copyPrice">SAO CHÉP BẢNG GIÁ</button>
+</div>
+<div class="row">
+<button class="gray" id="toggle">ẨN BẢNG GIÁ</button>
+<button class="gray" id="filter">CHỈ HIỆN CÓ ĐƠN</button>
+</div>
+<div id="note">Giá 25 = 25.000đ</div>
+<table>
+<thead><tr><th>MÃ</th><th>SỐ LƯỢNG</th><th id="priceHead">GIÁ (K)</th><th>THÀNH TIỀN</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+<div class="row">
+<button class="red" id="reset">XÓA SỐ LƯỢNG — GIỮ GIÁ</button>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const codes="VCB CTG BIDV MB VP TP LP TCB MSB SHB ACB STB HDB VIB NAB ABB BAB BVB KLB NCB PGB SGB VAB VBB PV GP VIKKI MBV NEO SCB BAOVIET KB KIS SSI KAFI".split(" ");
+let prices=codes.map((c,i)=>15+i*2);
+let qty=codes.map(()=>0);
+let seen=new Set();
+let show=true,only=false;
+const ed=$("editor");
+const fmt=n=>n.toLocaleString("vi-VN");
+const cash=n=>fmt(n)+"đ";
+function parse(s){
+s=s.trim().toUpperCase();
+let m=s.match(/^([A-Z]+)\s*[:X×-]?\s*(\d+)$/);
+let c,n;
+if(m){c=m[1];n=Number(m[2])}
+else{
+m=s.match(/^(\d+)\s*[:X×-]?\s*([A-Z]+)$/);
+if(!m)return null;
+c=m[2];n=Number(m[1]);
+}
+let i=codes.indexOf(c);
+return i>=0&&Number.isSafeInteger(n)&&n>0&&n<=999999999?{i,n}:null;
+}
+function lines(){return ed.innerText.replace(/\r/g,"").split("\n")}
+function entries(){return lines().filter(s=>s.trim())}
+function check(){
+let a=entries(),v=a.filter(parse).length,b=a.length-v;
+$("status").innerHTML='<span style="color:green">Đúng: '+v+'</span> | <span style="color:red">Sai: '+b+'</span>';
+$("add").disabled=b>0||v===0;
+$("remove").disabled=b===0;
+}
+function cursor(){
+let s=getSelection();
+if(!s.rangeCount||!ed.contains(s.anchorNode))return null;
+let r=s.getRangeAt(0).cloneRange();
+r.selectNodeContents(ed);
+r.setEnd(s.anchorNode,s.anchorOffset);
+return r.toString().length;
+}
+function restore(p){
+if(p===null)return;
+let w=document.createTreeWalker(ed,NodeFilter.SHOW_TEXT),n;
+while(n=w.nextNode()){
+if(p<=n.length){
+let r=document.createRange();
+r.setStart(n,p);r.collapse(true);
+let s=getSelection();
+s.removeAllRanges();s.addRange(r);return;
+}
+p-=n.length;
+}
+}
+function paint(a,p=null){
+ed.replaceChildren();
+a.forEach((s,i)=>{
+if(i)ed.append(document.createTextNode("\n"));
+let t=document.createElement("span");
+t.textContent=s;
+t.style.color=parse(s)?"#07883f":"#dc2626";
+ed.append(t);
+});
+restore(p);check();
+}
+ed.oninput=()=>{let p=cursor();paint(lines(),p)};
+ed.onkeydown=e=>{
+if(e.key==="Enter"){
+e.preventDefault();
+document.execCommand("insertText",false,"\n");
+}
+};
+ed.onpaste=e=>{
+e.preventDefault();
+document.execCommand("insertText",false,e.clipboardData.getData("text/plain"));
+};
+function totals(){
+$("count").textContent=fmt(qty.reduce((a,b)=>a+b,0));
+$("money").textContent=cash(qty.reduce((a,b,i)=>a+b*prices[i]*1000,0));
+}
+function render(){
+$("rows").replaceChildren();
+$("priceHead").style.display=show?"":"none";
+codes.forEach((c,i)=>{
+if(only&&!qty[i])return;
+let tr=document.createElement("tr");
+let name=document.createElement("td");
+name.textContent=c;
+name.style.fontWeight="bold";
+tr.append(name);
+let sum=document.createElement("td");
+function field(value,max,fn,visible=true){
+let td=document.createElement("td");
+td.style.display=visible?"":"none";
+let input=document.createElement("input");
+input.inputMode="numeric";
+input.value=value;
+input.maxLength=max;
+input.oninput=()=>{
+input.value=input.value.replace(/\D/g,"").slice(0,max);
+fn(Number(input.value)||0);
+sum.textContent=cash(qty[i]*prices[i]*1000);
+totals();
+};
+td.append(input);tr.append(td);
+}
+field(qty[i],9,v=>qty[i]=v);
+field(prices[i],2,v=>prices[i]=v,show);
+sum.textContent=cash(qty[i]*prices[i]*1000);
+tr.append(sum);$("rows").append(tr);
+});
+totals();
+}
+function note(s){$("note").textContent=s}
+$("remove").onclick=()=>{
+paint(lines().filter(parse));
+note("Đã xóa dòng sai");
+};
+$("add").onclick=()=>{
+let a=entries().map(parse);
+if(!a.length||a.some(x=>!x))return;
+let key=a.map(x=>x.i+":"+x.n).sort().join("|");
+if(seen.has(key)){note("Danh sách bị trùng, không cộng lại");return}
+seen.add(key);
+a.forEach(x=>qty[x.i]+=x.n);
+paint([]);render();
+note("Đã cộng thành công");
+};
+$("toggle").onclick=()=>{
+show=!show;
+$("toggle").textContent=show?"ẨN BẢNG GIÁ":"HIỆN BẢNG GIÁ";
+render();
+};
+$("filter").onclick=()=>{
+only=!only;
+$("filter").textContent=only?"HIỆN ĐỦ 35 MÃ":"CHỈ HIỆN CÓ ĐƠN";
+render();
+};
+async function copy(s){
+try{
+await navigator.clipboard.writeText(s);
+note("Đã sao chép");
+}catch(e){note("Trình duyệt không cho phép sao chép")}
+}
+$("copy").onclick=()=>copy(
+codes.map((c,i)=>qty[i]?c+" "+qty[i]+" = "+cash(qty[i]*prices[i]*1000):"").filter(Boolean).join("\n")+
+"\nTỔNG SỐ ĐƠN: "+$("count").textContent+
+"\nTỔNG SỐ TIỀN: "+$("money").textContent
+);
+$("copyPrice").onclick=()=>copy(codes.map((c,i)=>c+" "+cash(prices[i]*1000)).join("\n"));
+$("reset").onclick=()=>{
+qty.fill(0);seen.clear();render();
+note("Đã xóa số lượng, giữ nguyên giá");
+};
+render();check();
+</script>
+</body>
+</html>

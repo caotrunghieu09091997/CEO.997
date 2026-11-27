@@ -167,7 +167,7 @@ totals();
 td.append(input);tr.append(td);
 }
 field(qty[i],9,v=>qty[i]=v);
-field(prices[i],2,v=>prices[i]=v,show);
+field(prices[i],6,v=>prices[i]=v,show);
 sum.textContent=cash(qty[i]*prices[i]*1000);
 tr.append(sum);$("rows").append(tr);
 });
